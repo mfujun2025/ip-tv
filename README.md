@@ -26,7 +26,7 @@ permalink: /
 
 如不愿折腾开源项目，推荐直接下载第三方开发的软件 **直播电视** APP 使用，手机电视盒子都兼容，免费无广告。
 
-直播电视APP 下载地址：[https://izbds.com/aztv/](https://izbds.com/aztv/)    野草助手安装码：**0024**
+直播电视APP 下载地址：[https://izbds.com/aztv/](https://izbds.com/aztv/)    
 
 ------
 
@@ -37,7 +37,7 @@ permalink: /
 
 <p><strong>IPTV4直播源</strong>由部署在服务器上的程序自动扫描验证，确保<strong>直播源</strong>的时效性和稳定性。</p>
 
-<!-- UPDATE_TIME_IPTV4 -->本次更新时间: 2026-03-22 21:38:16<!-- END_UPDATE_TIME_IPTV4 -->
+<!-- UPDATE_TIME_IPTV4 -->本次更新时间: 2026-07-12 06:44:38<!-- END_UPDATE_TIME_IPTV4 -->
 
 <table>
   <colgroup>
@@ -78,7 +78,7 @@ https://gh-proxy.com/raw.githubusercontent.com/vbskycn/iptv/refs/heads/master/tv
 
 <p><strong>IPTV6直播源</strong>专为IPv6网络优化，由部署在服务器上的程序自动扫描验证，确保<strong>直播源</strong>的时效和稳定</p>
 
-<!-- UPDATE_TIME_IPTV6 -->本次更新时间: 2026-03-22 21:38:16<!-- END_UPDATE_TIME_IPTV6 -->
+<!-- UPDATE_TIME_IPTV6 -->本次更新时间: 2026-07-12 06:44:38<!-- END_UPDATE_TIME_IPTV6 -->
 
 **近期由于不可力抗原因，大部分ipv6源都关门了，大玩家各玩各的。造成网友们不能一网通吃，请大家静待花开吧！！如有开门的大玩家，本仓库第一时间更新上来给大家分享**
 
