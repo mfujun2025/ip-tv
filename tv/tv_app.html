@@ -99,10 +99,10 @@
   <div id="lockView" class="full">
     <div class="card">
       <h1>亲爱的用户，感谢您的支持！</h1>
-      <div class="sub">您的免费使用期已到期，请输入授权码继续观看<br>如显示网络连接失败，请重启光猫、路由器、电视盒子等设备</div>
+      <div class="sub">您的免费使用期已到期，请输入8位授权码继续观看<br>如显示网络连接失败，请重启光猫、路由器、电视盒子等设备</div>
       <div class="row"><span>设备账号</span><b id="lockDev"></b></div>
       <div class="row"><span>到期时间</span><b class="red" id="lockExp"></b></div>
-      <div class="codeBox" id="codeInput">请输入授权码</div>
+      <div class="codeBox" id="codeInput">请输入8位授权码</div>
       <div class="keypad" id="keypad"></div>
       <div class="msg" id="codeMsg"></div>
     </div>
@@ -211,7 +211,7 @@
     showView('lock');
     $('lockDev').textContent = shortId(APP.deviceId);
     $('lockExp').textContent = (APP.expire? fmtDate(APP.expire):'—');
-    $('codeInput').textContent = '请输入授权码';
+    $('codeInput').textContent = '请输入8位授权码';
     $('codeMsg').textContent='';
     codeBuffer='';
   }
@@ -358,13 +358,13 @@
   function keyHit(k){
     if(k==='Del'){ codeBuffer=codeBuffer.slice(0,-1); }
     else if(k==='OK'){ doVerify(); return; }
-    else { if(codeBuffer.length<24) codeBuffer+=k; }
-    $('codeInput').textContent = codeBuffer||'请输入授权码';
+    else { if(codeBuffer.length<8) codeBuffer+=k; }
+    $('codeInput').textContent = codeBuffer||'请输入8位授权码';
     $('codeMsg').textContent='';
   }
   function doVerify(){
     var m=$('codeMsg');
-    if(codeBuffer.length<18){ m.textContent='授权码不完整'; m.className='msg err'; return; }
+    if(codeBuffer.length<8){ m.textContent='授权码不完整（应为8位）'; m.className='msg err'; return; }
     m.textContent='正在验证…'; m.className='msg';
     verifyCode(codeBuffer).then(function(d){
       if(d.ok && d.expire_date){
