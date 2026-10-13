@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0b1020">
+<title>直播电视</title>
+<script src="/app/hls.min.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { width:100%; height:100%; background:#0b1020; color:#e8eaf2; font-family:"Microsoft YaHei","PingFang SC",Roboto,sans-serif; overflow:hidden; user-select:none; }
+  #app { width:100%; height:100%; position:relative; background:#0b1020; }
+
+  /* ===== 播放器 ===== */
+  #playerWrap { position:absolute; inset:0; background:#000; }
+  #player { width:100%; height:100%; object-fit:contain; background:#000; }
+  #topBar { position:absolute; top:0; left:0; right:0; padding:14px 22px; display:flex; justify-content:space-between; align-items:center;
+    background:linear-gradient(180deg,rgba(0,0,0,.75),rgba(0,0,0,0)); pointer-events:none; z-index:5; }
+  #topBar .logo { font-size:24px; font-weight:bold; color:#ffd34d; letter-spacing:1px; }
+  #topBar .logo small { font-size:12px; color:#9aa3bd; margin-left:8px; font-weight:normal; }
+  #topBar .info { font-size:15px; color:#c9d2ea; }
+  #topBar .info b { color:#5ef29a; }
+  #playHint { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#aab4d0; font-size:18px; z-index:4;
+    background:rgba(0,0,0,.5); padding:10px 24px; border-radius:8px; display:none; }
+  #loadErr { position:absolute; top:60%; left:50%; transform:translateX(-50%); color:#ff8a80; font-size:15px; z-index:4; display:none;
+    background:rgba(0,0,0,.6); padding:8px 20px; border-radius:6px; text-align:center; max-width:80%; }
+
+  /* ===== 频道列表浮层 ===== */
+  #listOverlay { position:absolute; inset:0; background:rgba(5,8,20,.72); display:none; z-index:10; }
+  #listOverlay.on { display:flex; }
+  #groups { width:21%; min-width:150px; max-width:240px; background:rgba(12,18,38,.95); overflow:hidden; padding:10px 0; }
+  #groups .g { padding:13px 16px; font-size:17px; color:#aab4d0; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #groups .g.cur { background:#ffd34d; color:#111; font-weight:bold; }
+  #channels { flex:1; background:rgba(8,12,28,.8); overflow:hidden; padding:10px 0; }
+  #channels .c { padding:13px 18px; font-size:17px; color:#d4dbf0; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #channels .c.cur { background:rgba(94,242,154,.25); color:#5ef29a; border-left:4px solid #5ef29a; font-weight:bold; }
+  #channels .c.playing::after { content:" ▶"; color:#ffd34d; }
+  #listHead { position:absolute; top:0; left:21%; right:0; height:44px; background:rgba(12,18,38,.95); display:flex; align-items:center; padding:0 18px;
+    font-size:14px; color:#8b94ad; gap:12px; }
+  #listHead b { color:#ffd34d; font-size:15px; }
+  #listHint { position:absolute; bottom:12px; left:50%; transform:translateX(-50%); font-size:13px; color:#8b94ad; background:rgba(0,0,0,.45); padding:6px 16px; border-radius:20px; }
+
+  /* ===== 全屏覆盖层（授权/设置） ===== */
+  .full { position:absolute; inset:0; background:rgba(4,7,16,.96); z-index:20; display:none; flex-direction:column; align-items:center; justify-content:center; }
+  .full.on { display:flex; }
+  .card { background:linear-gradient(160deg,#1a2442,#10162c); border:1px solid #2c3a63; border-radius:16px; padding:28px 36px; width:min(560px,90%);
+    box-shadow:0 12px 40px rgba(0,0,0,.6); }
+  .card h1 { font-size:22px; color:#ffd34d; margin-bottom:6px; text-align:center; }
+  .card .sub { font-size:14px; color:#9aa3bd; text-align:center; margin-bottom:18px; line-height:1.7; }
+  .row { display:flex; justify-content:space-between; font-size:15px; padding:8px 0; border-bottom:1px dashed #263252; }
+  .row span { color:#9aa3bd; } .row b { color:#e8eaf2; }
+  .row b.green { color:#5ef29a; } .row b.red { color:#ff8a80; }
+
+  .codeBox { background:#0a0f22; border:2px solid #3c4f85; border-radius:10px; font-size:26px; letter-spacing:3px; color:#5ef29a; text-align:center;
+    padding:12px; margin:14px 0; min-height:52px; word-break:break-all; font-family:Consolas,monospace; }
+  .keypad { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:8px; }
+  .key { background:#1c2745; border:1px solid #33416e; border-radius:10px; padding:14px 0; font-size:22px; color:#e8eaf2; text-align:center; cursor:pointer; }
+  .key:active { background:#2a3a68; }
+  .key.del { color:#ff8a80; } .key.ok { background:#ffd34d; color:#111; font-weight:bold; }
+  .btn { display:inline-block; padding:12px 30px; border-radius:10px; font-size:17px; text-align:center; cursor:pointer; margin:10px 6px 0; }
+  .btn.exit { background:#2d5bff; color:#fff; }
+  .btn.set { background:#2a3450; color:#c9d2ea; }
+  .btn.yellow { background:#ffd34d; color:#111; font-weight:bold; }
+  .btn.gray { background:#2a3450; color:#c9d2ea; }
+  .msg { font-size:14px; margin-top:12px; min-height:20px; text-align:center; }
+  .msg.err { color:#ff8a80; } .msg.ok { color:#5ef29a; }
+  .warn { background:rgba(255,211,77,.12); border:1px solid rgba(255,211,77,.4); color:#ffd34d; border-radius:8px; padding:10px 14px; font-size:13px; line-height:1.7; margin-top:12px; }
+
+  @media (max-width:640px){
+    #topBar .logo{font-size:18px;} #topBar .info{font-size:12px;}
+    #groups{width:34%;min-width:0;max-width:none;} #channels .c,#groups .g{font-size:14px;padding:10px 10px;}
+    #listHead{left:34%;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- 播放器 -->
+  <div id="playerWrap">
+    <video id="player" autoplay playsinline webkit-playsinline></video>
+  </div>
+  <div id="topBar">
+    <div class="logo">直播电视<small>TV LIVE</small></div>
+    <div class="info" id="topInfo">加载中…</div>
+  </div>
+  <div id="playHint">◀ ▶ 切换频道 · OK 列表</div>
+  <div id="loadErr"></div>
+
+  <!-- 频道列表浮层 -->
+  <div id="listOverlay">
+    <div id="groups"></div>
+    <div id="channels"></div>
+    <div id="listHead"><b id="groupName"></b><span id="channelCount"></span></div>
+    <div id="listHint">↑↓ 选频道  ←→ 切分组  OK 播放  BACK/返回 关闭</div>
+  </div>
+
+  <!-- 到期锁定 + 授权码输入 -->
+  <div id="lockView" class="full">
+    <div class="card">
+      <h1>亲爱的用户，感谢您的支持！</h1>
+      <div class="sub">您的免费使用期已到期，请输入8位授权码继续观看<br>如显示网络连接失败，请重启光猫、路由器、电视盒子等设备</div>
+      <div class="row"><span>设备账号</span><b id="lockDev"></b></div>
+      <div class="row"><span>到期时间</span><b class="red" id="lockExp"></b></div>
+      <div class="codeBox" id="codeInput">请输入8位授权码</div>
+      <div class="keypad" id="keypad"></div>
+      <div class="msg" id="codeMsg"></div>
+    </div>
+  </div>
+
+  <!-- 设置/退出 -->
+  <div id="setView" class="full">
+    <div class="card">
+      <h1>直播电视 · 设置</h1>
+      <div class="sub">所有资源均来源于网络公开链接，版权归原著所有</div>
+      <div class="row"><span>设备账号</span><b id="setDev"></b></div>
+      <div class="row"><span>到期天数</span><b class="green" id="setDays"></b></div>
+      <div class="row"><span>到期时间</span><b id="setExp"></b></div>
+      <div class="row"><span>软件版本</span><b>v1.0.0</b></div>
+      <div style="text-align:center;margin-top:16px;">
+        <span class="btn exit" id="btnQuit">退出</span>
+        <span class="btn gray" id="btnBack2">返回</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 首次引导 -->
+  <div id="welcomeView" class="full">
+    <div class="card">
+      <h1>直播电视</h1>
+      <div class="sub">正在为您的设备激活免费使用期，请稍后…</div>
+      <div class="msg" id="welcomeMsg"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var APP = {
+    deviceId: '',
+    expire: null,           // Date
+    groups: [],             // [{name, channels:[{name,url}]}]
+    gIndex: 0, cIndex: 0,
+    hls: null,
+    playingUrl: '',
+    view: 'home'            // home | list | lock | auth | settings | welcome
+  };
+  var SECRET_VER = '1.0.0';
+  var $ = function(id){ return document.getElementById(id); };
+
+  /* ============ 设备与授权 ============ */
+  function genUUID(){
+    var s=[],i;
+    for(i=0;i<36;i++){ var r=Math.floor(Math.random()*16);
+      s.push((i===8||i===13||i===18||i===23)?'-':(i===14?'4':(i===19?(r&3|8).toString(16):r.toString(16)))); }
+    return s.join('');
+  }
+  function getDeviceId(){
+    var d=localStorage.getItem('dev_id');
+    if(!d){ d=genUUID(); localStorage.setItem('dev_id',d); }
+    return d;
+  }
+  function shortId(id){ return (id||'').replace(/-/g,'').slice(0,8).toUpperCase(); }
+  function today0(){ var t=new Date(); t.setHours(0,0,0,0); return t; }
+  function parseDate(s){ var p=(s||'').split('-'); return p.length===3?new Date(+p[0],+p[1]-1,+p[2]):null; }
+  function daysLeft(exp){ return Math.max(0, Math.round((exp - today0())/86400000)); }
+
+  function api(url, body){
+    return fetch(url, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body||{}) }).then(function(r){ return r.json(); }).catch(function(e){
+        return { ok:false, error:'网络错误，请检查网络后重试' }; });
+  }
+
+  function saveAuth(d){
+    if(d && d.expire_date){ localStorage.setItem('dev_expire', d.expire_date); APP.expire=parseDate(d.expire_date); }
+    if(d && d.token){ localStorage.setItem('dev_token', d.token); }
+  }
+  function activate(){
+    return api('/api/activate', { device_id: APP.deviceId }).then(function(d){
+      if(d.ok && d.expire_date){ saveAuth(d); return true; }
+      return false;
+    });
+  }
+  function verifyCode(code){
+    return api('/api/verify', { device_id: APP.deviceId, code: String(code||'').trim() });
+  }
+
+  /* ============ 授权流程 ============ */
+  function boot(){
+    APP.deviceId = getDeviceId();
+    var exp = localStorage.getItem('dev_expire');
+    APP.expire = parseDate(exp);
+    if(!APP.expire){
+      showView('welcome');
+      $('welcomeMsg').textContent = '正在激活…';
+      activate().then(function(ok){
+        if(ok){ $('welcomeMsg').textContent='激活成功，正在进入…'; setTimeout(enterApp, 600); }
+        else { $('welcomeMsg').textContent='激活失败：'+'网络异常或服务不可用，请检查网络后重试'; }
+      });
+    } else if (APP.expire < today0()){
+      enterLock();
+    } else {
+      var tok = localStorage.getItem('dev_token');
+      if(tok){ enterApp(); }
+      else {
+        showView('welcome');
+        $('welcomeMsg').textContent = '正在同步授权…';
+        activate().then(function(ok){
+          if(ok){ enterApp(); }
+          else { $('welcomeMsg').textContent='授权同步失败，请检查网络后重试'; }
+        });
+      }
+    }
+  }
+
+  function enterApp(){
+    showView('home');
+    updateTopInfo();
+    loadChannels();
+  }
+  function enterLock(msg){
+    showView('lock');
+    $('lockDev').textContent = shortId(APP.deviceId);
+    $('lockExp').textContent = (APP.expire? fmtDate(APP.expire):'—');
+    $('codeInput').textContent = '请输入8位授权码';
+    $('codeMsg').textContent = msg || '';
+    codeBuffer='';
+  }
+  function fmtDate(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+  function pad2(n){ return (n<10?'0':'')+n; }
+
+  function updateTopInfo(){
+    if(APP.expire){
+      var dl=daysLeft(APP.expire);
+      $('topInfo').innerHTML = '剩余 <b>'+dl+'</b> 天 · 设备 ' + shortId(APP.deviceId);
+    } else {
+      $('topInfo').textContent = '设备 ' + shortId(APP.deviceId);
+    }
+  }
+
+  function showView(v){
+    APP.view=v;
+    $('lockView').classList.remove('on');
+    $('setView').classList.remove('on');
+    $('welcomeView').classList.remove('on');
+    $('listOverlay').classList.remove('on');
+    if(v==='lock') $('lockView').classList.add('on');
+    if(v==='settings') $('setView').classList.add('on');
+    if(v==='welcome') $('welcomeView').classList.add('on');
+    if(v==='list') $('listOverlay').classList.add('on');
+  }
+
+  /* ============ 频道源加载 ============ */
+  var authRetrying = false;
+  function loadChannels(){
+    var token = localStorage.getItem('dev_token') || '';
+    fetch('/iptv4.txt' + (token ? '?t=' + encodeURIComponent(token) : ''), { cache:'no-store' }).then(function(r){
+      if(r.status === 403){
+        if(!authRetrying){
+          authRetrying = true;
+          return activate().then(function(ok){
+            authRetrying = false;
+            if(ok){ return loadChannels(); }
+            enterLock('授权已到期，请输入授权码续期');
+            throw new Error('授权已到期');
+          });
+        }
+        throw new Error('授权已到期，请输入授权码续期');
+      }
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.text();
+    }).then(function(txt){
+      APP.groups = parseTxt(txt);
+      if(!APP.groups.length){ err('未获取到频道列表'); return; }
+      APP.gIndex=0; APP.cIndex=0;
+      renderList();
+      playChannel();
+      if(APP.view!=='list') $('playHint').style.display='block';
+      setTimeout(function(){ $('playHint').style.display='none'; }, 2600);
+    }).catch(function(e){
+      err('频道列表加载失败：'+e.message);
+    });
+  }
+
+  function parseTxt(txt){
+    var lines=(txt||'').split(/\r?\n/), groups=[], cur=null, seen={};
+    lines.forEach(function(ln){
+      ln=ln.trim(); if(!ln) return;
+      if(ln.indexOf('#genre#')>=0){ var n=ln.replace('#genre#','').replace(/,+$/,'').trim()||'其他';
+        cur={name:n, channels:[]}; groups.push(cur); return; }
+      var i=ln.indexOf(',');
+      if(i<0) return;
+      var name=ln.slice(0,i).trim(), url=ln.slice(i+1).trim();
+      if(!/^https?:\/\//i.test(url)) return;
+      if(seen[url]) return; seen[url]=1;
+      if(!cur){ cur={name:'全部', channels:[]}; groups.push(cur); }
+      cur.channels.push({name:name, url:url});
+    });
+    return groups.filter(function(g){ return g.channels.length>0; });
+  }
+
+  /* ============ 列表渲染 ============ */
+  function renderList(){
+    var gs=$('groups'), cs=$('channels');
+    gs.innerHTML=''; cs.innerHTML='';
+    APP.groups.forEach(function(g,i){
+      var d=document.createElement('div'); d.className='g'+(i===APP.gIndex?' cur':'');
+      d.textContent=g.name; d.dataset.i=i;
+      d.addEventListener('click',function(){ APP.gIndex=+this.dataset.i; APP.cIndex=0; renderList(); });
+      gs.appendChild(d);
+    });
+    var g=APP.groups[APP.gIndex];
+    $('groupName').textContent=g.name;
+    $('channelCount').textContent=g.channels.length+' 个频道';
+    g.channels.forEach(function(c,i){
+      var d=document.createElement('div'); d.className='c'+(i===APP.cIndex?' cur':'')+(c.url===APP.playingUrl?' playing':'');
+      d.textContent=c.name; d.dataset.i=i;
+      d.addEventListener('click',function(){ APP.cIndex=+this.dataset.i; playChannel(); renderList(); });
+      cs.appendChild(d);
+    });
+    var csEl=cs.querySelector('.c.cur'); if(csEl) csEl.scrollIntoView({block:'center'});
+    var gsEl=gs.querySelector('.g.cur'); if(gsEl) gsEl.scrollIntoView({block:'center'});
+  }
+
+  function curChannel(){
+    var g=APP.groups[APP.gIndex]; if(!g||!g.channels.length) return null;
+    if(APP.cIndex>=g.channels.length) APP.cIndex=0;
+    return g.channels[APP.cIndex];
+  }
+
+  /* ============ 播放 ============ */
+  function playChannel(){
+    var ch=curChannel(); if(!ch) return;
+    playUrl(ch.url);
+  }
+  function playUrl(url){
+    if(!url) return;
+    var video=$('player');
+    err('');
+    // https 页面播 http 源会被浏览器拦截
+    if(location.protocol==='https:' && /^http:\/\//i.test(url)){
+      err('提示：当前源为 http，请改用 http://' + location.host + '/app 访问以获得完整播放');
+      // 仍然尝试
+    }
+    if(APP.hls){ try{ APP.hls.destroy(); }catch(e){} APP.hls=null; }
+    APP.playingUrl=url;
+    var isM3u8=/\.m3u8($|\?)/i.test(url);
+    if(isM3u8 && window.Hls && Hls.isSupported()){
+      var hls=new Hls({ enableWorker:true, maxBufferLength:30, manifestLoadingTimeOut:10000, levelLoadingTimeOut:10000 });
+      APP.hls=hls;
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.ERROR,function(ev,data){
+        if(data && data.fatal){
+          if(data.type==='networkError'){ hls.startLoad(); }
+          else if(data.type==='mediaError'){ hls.recoverMediaError(); }
+          else { err('播放失败：源不可用'); }
+        }
+      });
+      video.play().catch(function(){});
+    } else {
+      video.src=url;
+      video.play().catch(function(){ err('播放失败：源不可用或格式不支持'); });
+    }
+  }
+  function err(msg){
+    var el=$('loadErr'); el.textContent=msg||''; el.style.display=msg?'block':'none';
+  }
+
+  /* ============ 授权码软键盘 ============ */
+  var codeBuffer='';
+  function buildKeypad(){
+    var kp=$('keypad'); kp.innerHTML='';
+    var keys=['1','2','3','4','5','6','7','8','9','0','Del','OK'];
+    keys.forEach(function(k){
+      var d=document.createElement('div');
+      d.className='key'+(k==='Del'?' del':k==='OK'?' ok':'');
+      d.textContent=k;
+      d.addEventListener('click',function(){ keyHit(k); });
+      kp.appendChild(d);
+    });
+  }
+  function keyHit(k){
+    if(k==='Del'){ codeBuffer=codeBuffer.slice(0,-1); }
+    else if(k==='OK'){ doVerify(); return; }
+    else { if(codeBuffer.length<8) codeBuffer+=k; }
+    $('codeInput').textContent = codeBuffer||'请输入8位授权码';
+    $('codeMsg').textContent='';
+  }
+  function doVerify(){
+    var m=$('codeMsg');
+    if(codeBuffer.length<8){ m.textContent='授权码不完整（应为8位）'; m.className='msg err'; return; }
+    m.textContent='正在验证…'; m.className='msg';
+    verifyCode(codeBuffer).then(function(d){
+      if(d.ok && d.expire_date){
+        localStorage.setItem('dev_expire', d.expire_date);
+        if(d.token) localStorage.setItem('dev_token', d.token);
+        APP.expire=parseDate(d.expire_date);
+        m.textContent='验证成功！到期时间：'+d.expire_date; m.className='msg ok';
+        setTimeout(function(){ enterApp(); }, 900);
+      } else {
+        m.textContent=d.error||'授权码无效'; m.className='msg err';
+      }
+    });
+  }
+
+  /* ============ 设置界面 ============ */
+  function openSettings(){
+    showView('settings');
+    $('setDev').textContent=shortId(APP.deviceId);
+    if(APP.expire){ $('setDays').textContent=daysLeft(APP.expire)+' 天'; $('setExp').textContent=fmtDate(APP.expire); }
+    else { $('setDays').textContent='—'; $('setExp').textContent='—'; }
+  }
+
+  /* ============ 遥控器/键盘 ============ */
+  document.addEventListener('keydown', function(e){
+    var k=e.key;
+    if(APP.view==='lock'){
+      if(/^[0-9]$/.test(k)){ keyHit(k); }
+      else if(k==='Backspace'){ keyHit('Del'); }
+      else if(k==='Enter'){ keyHit('OK'); }
+      e.preventDefault(); return;
+    }
+    if(APP.view==='list'){
+      if(k==='ArrowDown'){ APP.cIndex=Math.min(APP.cIndex+1, APP.groups[APP.gIndex].channels.length-1); renderList(); }
+      else if(k==='ArrowUp'){ APP.cIndex=Math.max(APP.cIndex-1,0); renderList(); }
+      else if(k==='ArrowRight'||k==='PageDown'){ APP.gIndex=Math.min(APP.gIndex+1,APP.groups.length-1); APP.cIndex=0; renderList(); }
+      else if(k==='ArrowLeft'||k==='PageUp'){ APP.gIndex=Math.max(APP.gIndex-1,0); APP.cIndex=0; renderList(); }
+      else if(k==='Enter'){ playChannel(); showView('home'); }
+      else if(k==='Backspace'||k==='Escape'){ showView('home'); }
+      else if(k==='Settings'||k==='F4'){ openSettings(); }
+      e.preventDefault(); return;
+    }
+    if(APP.view==='home'){
+      if(k==='Enter'||k==='ArrowUp'||k==='ArrowDown'){ showView('list'); renderList(); }
+      else if(k==='ArrowLeft'){ APP.gIndex=Math.max(APP.gIndex-1,0); APP.cIndex=0; playChannel(); }
+      else if(k==='ArrowRight'){ APP.gIndex=Math.min(APP.gIndex+1,APP.groups.length-1); APP.cIndex=0; playChannel(); }
+      else if(k==='Backspace'||k==='Escape'){ openSettings(); }
+      else if(k==='Settings'||k==='F4'){ openSettings(); }
+      e.preventDefault();
+    }
+    if(APP.view==='settings'){
+      if(k==='Backspace'||k==='Escape'||k==='Enter'){ showView('home'); }
+      e.preventDefault();
+    }
+  });
+
+  /* ============ 按钮 ============ */
+  $('btnQuit').addEventListener('click', function(){
+    if(confirm('确定退出直播电视？')){ try{ window.close(); }catch(e){} location.href='about:blank'; }
+  });
+  $('btnBack2').addEventListener('click', function(){ showView('home'); });
+
+  document.addEventListener('click', function(e){
+    if(APP.view==='home' && !e.target.closest('#topBar')){ showView('list'); renderList(); }
+  });
+
+  /* ============ 启动 ============ */
+  buildKeypad();
+  boot();
+})();
+</script>
+</body>
+</html>
