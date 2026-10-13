@@ -1,0 +1,58 @@
+name: 构建直播电视APK
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'tv-app-android/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 安装 Android SDK 组件
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" > /dev/null 2>&1 || true
+
+      - name: 安装 Gradle
+        run: |
+          curl -sLO https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip -q gradle-8.7-bin.zip
+          echo "$PWD/gradle-8.7/bin" >> $GITHUB_PATH
+
+      - name: 构建 APK
+        run: gradle -p tv-app-android assembleDebug
+
+      - name: 上传 APK 到构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: tv-live-apk
+          path: tv-app-android/app/build/outputs/apk/debug/*.apk
+
+      - name: 发布 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_id }}
+          name: 直播电视 APK（${{ github.run_id }}）
+          body: |
+            直播电视 Android 版
+            - 安装包：app-debug.apk（下方 Assets 中下载）
+            - 支持 Android 8.0+（电视/手机/机顶盒）
+            - 首次打开自动激活免费 365 天，到期凭授权码续期
+          files: tv-app-android/app/build/outputs/apk/debug/*.apk
+          generate_release_notes: false
