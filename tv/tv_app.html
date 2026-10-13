@@ -173,9 +173,13 @@
         return { ok:false, error:'网络错误，请检查网络后重试' }; });
   }
 
+  function saveAuth(d){
+    if(d && d.expire_date){ localStorage.setItem('dev_expire', d.expire_date); APP.expire=parseDate(d.expire_date); }
+    if(d && d.token){ localStorage.setItem('dev_token', d.token); }
+  }
   function activate(){
     return api('/api/activate', { device_id: APP.deviceId }).then(function(d){
-      if(d.ok && d.expire_date){ localStorage.setItem('dev_expire', d.expire_date); APP.expire=parseDate(d.expire_date); return true; }
+      if(d.ok && d.expire_date){ saveAuth(d); return true; }
       return false;
     });
   }
@@ -198,7 +202,16 @@
     } else if (APP.expire < today0()){
       enterLock();
     } else {
-      enterApp();
+      var tok = localStorage.getItem('dev_token');
+      if(tok){ enterApp(); }
+      else {
+        showView('welcome');
+        $('welcomeMsg').textContent = '正在同步授权…';
+        activate().then(function(ok){
+          if(ok){ enterApp(); }
+          else { $('welcomeMsg').textContent='授权同步失败，请检查网络后重试'; }
+        });
+      }
     }
   }
 
@@ -207,12 +220,12 @@
     updateTopInfo();
     loadChannels();
   }
-  function enterLock(){
+  function enterLock(msg){
     showView('lock');
     $('lockDev').textContent = shortId(APP.deviceId);
     $('lockExp').textContent = (APP.expire? fmtDate(APP.expire):'—');
     $('codeInput').textContent = '请输入8位授权码';
-    $('codeMsg').textContent='';
+    $('codeMsg').textContent = msg || '';
     codeBuffer='';
   }
   function fmtDate(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
@@ -240,8 +253,22 @@
   }
 
   /* ============ 频道源加载 ============ */
+  var authRetrying = false;
   function loadChannels(){
-    fetch('/iptv4.txt', {cache:'no-store'}).then(function(r){
+    var token = localStorage.getItem('dev_token') || '';
+    fetch('/iptv4.txt' + (token ? '?t=' + encodeURIComponent(token) : ''), { cache:'no-store' }).then(function(r){
+      if(r.status === 403){
+        if(!authRetrying){
+          authRetrying = true;
+          return activate().then(function(ok){
+            authRetrying = false;
+            if(ok){ return loadChannels(); }
+            enterLock('授权已到期，请输入授权码续期');
+            throw new Error('授权已到期');
+          });
+        }
+        throw new Error('授权已到期，请输入授权码续期');
+      }
       if(!r.ok) throw new Error('HTTP '+r.status);
       return r.text();
     }).then(function(txt){
@@ -369,6 +396,7 @@
     verifyCode(codeBuffer).then(function(d){
       if(d.ok && d.expire_date){
         localStorage.setItem('dev_expire', d.expire_date);
+        if(d.token) localStorage.setItem('dev_token', d.token);
         APP.expire=parseDate(d.expire_date);
         m.textContent='验证成功！到期时间：'+d.expire_date; m.className='msg ok';
         setTimeout(function(){ enterApp(); }, 900);
